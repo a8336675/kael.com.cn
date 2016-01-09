@@ -1,0 +1,178 @@
+package cn.com.kael.www.googlemarket.utils;
+
+import org.json.JSONException;
+
+import java.lang.reflect.Field;
+
+import cn.com.kael.www.googlemarket.bean.AppInfoBean;
+
+/**
+ * @author kael
+ * @create 2014-12-25 下午4:58:18
+ * @describe 直接分析JSON字符串，并生成解析该类型JSON字符串的Java代码
+ * @describe 局限性：
+ * @describe 1, JSON字符串的最上层，必须是JSONObject；
+ * @describe 2, 类中的List类型成员，必须指定泛型，并且必须在声明时初始化
+ *
+ * @svn_version $Rev: 98 $
+ * @svn_updater $Author: kael $
+ * @svn_date $Date: 2016-01-02 16:16:05 +0800 (星期六, 02 一月 2016) $
+ */
+public class JSON2JavaBodyUtils {
+	public String parseBean2Java(Class<?> clazz) throws JSONException, IllegalArgumentException, IllegalAccessException,
+			InstantiationException, ClassNotFoundException {
+		StringBuilder msg = new StringBuilder();
+		msg.append("public void fromJSON(String json) throws JSONException {\n");
+		msg.append("JSONObject jsonObj0 = new JSONObject(json);\n");
+		printFields(clazz, msg, 0);
+		msg.append("}");
+		return msg.toString();
+	}
+
+	/**
+	 * 反射指定Class中的所有属性，并根据属性生成解析JSON字符串的Java代码
+	 * @create 2016-1-2 下午2:27:25
+	 *
+	 * @param clazz 指定的Class
+	 * @param msg 最终的结果集
+	 * @param level 层级
+	 *
+	 * @throws IllegalArgumentException
+	 * @throws IllegalAccessException
+	 * @throws InstantiationException
+	 * @throws ClassNotFoundException
+	 */
+	private void printFields(Class<?> clazz, StringBuilder msg, int level) throws IllegalArgumentException,
+			IllegalAccessException, InstantiationException, ClassNotFoundException {
+		Field[] fields = clazz.getFields();
+		for (Field field : fields) {
+			String variable = level == 0 ? "this" : "bean" + level;
+			String name = field.getName();
+			String simpleTypeName = field.getType().getSimpleName();
+
+			if ("String".equalsIgnoreCase(simpleTypeName) || "char".equalsIgnoreCase(simpleTypeName)
+					|| "Character".equalsIgnoreCase(simpleTypeName)) {
+				msg.append(variable).append(".").append(name).append(" = jsonObj").append(level).append(".optString(\"")
+						.append(name).append("\");");
+			} else if ("int".equalsIgnoreCase(simpleTypeName) || "Integer".equalsIgnoreCase(simpleTypeName)
+					|| "short".equalsIgnoreCase(simpleTypeName)) {
+				msg.append(variable).append(".").append(name).append(" = jsonObj").append(level).append(".optInt(\"")
+						.append(name).append("\");");
+			} else if ("boolean".equalsIgnoreCase(simpleTypeName)) {
+				msg.append(variable).append(".").append(name).append(" = jsonObj").append(level).append(".optBoolean(\"")
+						.append(name).append("\");");
+			} else if ("double".equalsIgnoreCase(simpleTypeName) || "float".equalsIgnoreCase(simpleTypeName)) {
+				msg.append(variable).append(".").append(name).append(" = jsonObj").append(level).append(".optDouble(\"")
+						.append(name).append("\");");
+			} else if ("long".equalsIgnoreCase(simpleTypeName)) {
+				msg.append(variable).append(".").append(name).append(" = jsonObj").append(level).append(".optLong(\"")
+						.append(name).append("\");");
+			} else if ("List".equalsIgnoreCase(simpleTypeName)) {
+				if (field.getGenericType().toString().contains("Integer")) {
+					loadNormalList(field, Integer.class, "optInt", msg, level);
+				} else if (field.getGenericType().toString().contains("String")) {
+					loadNormalList(field, String.class, "optString", msg, level);
+				} else if (field.getGenericType().toString().contains("Double")) {
+					loadNormalList(field, Double.class, "optDouble", msg, level);
+				} else if (field.getGenericType().toString().contains("Float")) {
+					loadNormalList(field, Float.class, "optDouble", msg, level);
+				} else if (field.getGenericType().toString().contains("Boolean")) {
+					loadNormalList(field, Boolean.class, "optBoolean", msg, level);
+				} else if (field.getGenericType().toString().contains("Character")) {
+					loadNormalList(field, Character.class, "optString", msg, level);
+				} else if (field.getGenericType().toString().contains("Long")) {
+					loadNormalList(field, Long.class, "optLong", msg, level);
+				} else {
+					String beanName = getListFieldName(field);
+					String beanType = getListFieldType(field);
+
+					msg.append("JSONArray jsonArr").append(level + 1).append(" = jsonObj").append(level)
+							.append(".optJSONArray(\"").append(name).append("\");\n");
+					msg.append("if (null != jsonArr").append(level + 1).append(") {\nfor (int i").append(level + 1)
+							.append(" = 0; i").append(level + 1).append(" < jsonArr").append(level + 1).append(".length(); i")
+							.append(level + 1).append("++) {\nJSONObject jsonObj").append(level + 1).append(" = jsonArr")
+							.append(level + 1).append(".getJSONObject(i").append(level + 1).append(");\n\n");
+					msg.append(beanName).append(" bean").append(level + 1).append(" = new ").append(beanName).append("();\n\n");
+					Class<?> childClazz = Class.forName(beanType);
+					printFields(childClazz, msg, level + 1);
+					msg.append(variable).append(".").append(name).append(".add(bean").append(level + 1).append(");");
+					msg.append("}\n}");
+				}
+			}
+			msg.append("\n");
+		}
+		System.out.println();
+		msg.append("\n");
+	}
+
+	/**
+	 * 获取List中，元素的类名
+	 * @create 2016-1-2 下午2:28:41
+	 *
+	 * @param field
+	 * @return
+	 */
+	public static String getListFieldName(Field field) {
+		String type = field.getGenericType().toString();
+		type = type.substring(type.lastIndexOf("$") + 1, type.lastIndexOf(">"));
+		return type;
+	}
+
+	/**
+	 * 获取List中，元素的类全名
+	 * @create 2016-1-2 下午2:29:12
+	 *
+	 * @param field
+	 * @return
+	 */
+	public static String getListFieldType(Field field) {
+		String type = field.getGenericType().toString();
+		type = type.substring(type.lastIndexOf("<") + 1, type.lastIndexOf(">"));
+		type = type.replace("&", ".");
+		return type;
+	}
+
+	/**
+	 * 常规属性的List的解析
+	 * @create 2016-1-2 下午2:40:08
+	 *
+	 * @param field
+	 * @param clazz
+	 * @param methodStr
+	 * @param msg
+	 * @param level
+	 */
+	public static void loadNormalList(Field field, Class<?> clazz, String methodStr, StringBuilder msg, int level) {
+		msg.append("JSONArray ").append(field.getName()).append(" = jsonObj").append(level).append(".optJSONArray(\"")
+				.append(field.getName()).append("\");\n");
+		msg.append("for (int i").append(level + 1).append(" = 0; i").append(level + 1).append(" < ").append(field.getName())
+				.append(".length(); i").append(level + 1).append("++) {\n");
+		msg.append(clazz.getSimpleName()).append(" obj").append(level + 1).append(" = ").append(field.getName()).append(".")
+				.append(methodStr).append("(i").append(level + 1).append(");\n");
+		msg.append("this.").append(field.getName()).append(".add(obj").append(level + 1).append(");\n}\n");
+	}
+
+	/**
+	 * 测试
+	 * @create 2016-1-2 下午2:33:49
+	 *
+	 * @param args
+	 */
+	public static void main(String[] args) {
+		JSON2JavaBodyUtils utils = new JSON2JavaBodyUtils();
+		try {
+			System.out.println(utils.parseBean2Java(AppInfoBean.class));
+		} catch (JSONException e) {
+			e.printStackTrace();
+		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
+		} catch (IllegalAccessException e) {
+			e.printStackTrace();
+		} catch (InstantiationException e) {
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+	}
+
+}
