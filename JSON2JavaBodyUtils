@@ -176,3 +176,19 @@ public class JSON2JavaBodyUtils {
 	}
 
 }
+
+public class AppInfoBean {
+    public List<ItemInfoBean> list = new ArrayList<ItemInfoBean>(); // 需要指定泛型，并实例化
+
+    public class ItemInfoBean {
+        public int id;              // 应用的id
+        public String des;          // 应用的描述
+        public String packageName;  // 应用的包名
+        public float stars;         // 应用的评分
+        public String iconUrl;      // 应用的图标的URL
+        public String name;         // 应用的名字
+        public String downloadUrl;  // 应用的下载连接
+        public int size;            // 应用的大小
+    }
+
+}
